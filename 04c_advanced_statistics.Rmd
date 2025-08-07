@@ -1,0 +1,392 @@
+---
+title: "CAMK2D Advanced Statistics"
+subtitle: "Optional Module - Bootstrap and Bayesian Analysis"
+author: "CAMK2D Research Automation System"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 2
+    number_sections: true
+    theme: flatly
+    highlight: tango
+    code_folding: show
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  warning = FALSE,
+  message = FALSE,
+  fig.width = 10,
+  fig.height = 6,
+  fig.align = 'center',
+  cache = FALSE,
+  comment = "#>"
+)
+
+set.seed(42)
+```
+
+# Advanced Statistics Module
+
+This optional module performs bootstrap confidence intervals and Bayesian meta-analysis. Memory-intensive operations are performed with careful resource management.
+
+## Setup and Package Checking
+
+```{r setup-advanced}
+# Clear environment for fresh start
+rm(list = ls())
+gc(verbose = FALSE)
+
+# Check for required packages
+required_packages <- c("metafor", "boot", "tidyverse")
+optional_packages <- c("bayesmeta")
+
+missing_required <- character()
+missing_optional <- character()
+
+for (pkg in required_packages) {
+  if (!requireNamespace(pkg, quietly = TRUE)) {
+    missing_required <- c(missing_required, pkg)
+  }
+}
+
+for (pkg in optional_packages) {
+  if (!requireNamespace(pkg, quietly = TRUE)) {
+    missing_optional <- c(missing_optional, pkg)
+  }
+}
+
+if (length(missing_required) > 0) {
+  stop("Required packages missing: ", paste(missing_required, collapse = ", "), 
+       "\nPlease install packages or skip this module.")
+}
+
+# Load essential packages
+suppressPackageStartupMessages({
+  library(metafor)
+  library(boot)
+  library(tidyverse)
+  library(kableExtra)
+  library(ggplot2)
+})
+
+# Conditional loading of bayesmeta
+bayesian_available <- length(missing_optional) == 0
+if (bayesian_available) {
+  library(bayesmeta)
+  cat("All packages loaded (including Bayesian analysis)\n")
+} else {
+  cat("Bayesian packages not available - skipping Bayesian analysis\n")
+}
+
+cat("Available memory:\n")
+print(gc())
+```
+
+## Load Core Results
+
+```{r load-data}
+# Load core meta-analysis results
+if (!file.exists("results/core_meta_analysis.rds")) {
+  stop("Core meta-analysis results not found. Please run 04a_basic_meta_analysis.Rmd first.")
+}
+
+core_results <- readRDS("results/core_meta_analysis.rds")
+meta_model <- core_results$random_model
+effects_data <- core_results$data
+
+cat("Loaded core meta-analysis results\n")
+cat("Studies:", nrow(effects_data), "| Pooled effect:", round(meta_model$beta, 3), "\n")
+
+# Memory checkpoint
+gc(verbose = FALSE)
+```
+
+## Bootstrap Confidence Intervals
+
+```{r bootstrap-analysis}
+cat("=== Bootstrap Analysis ===\n")
+
+perform_bootstrap <- function(data, n_boot = 300) {  # Reduced from 500 for memory
+  cat("Running", n_boot, "bootstrap iterations...\n")
+  
+  # Bootstrap function for meta-analysis
+  boot_meta <- function(data, indices) {
+    d <- data[indices, ]
+    weights <- 1 / d$SE_D^2
+    weighted_mean <- sum(d$Cohens_D * weights) / sum(weights)
+    return(weighted_mean)
+  }
+  
+  # Perform bootstrap with memory management
+  gc(verbose = FALSE)
+  boot_results <- boot(
+    data = data,
+    statistic = boot_meta,
+    R = n_boot
+  )
+  
+  # Memory cleanup after bootstrap
+  gc(verbose = FALSE)
+  cat("Bootstrap completed, memory cleaned\n")
+  
+  # Calculate confidence intervals
+  boot_ci <- boot.ci(boot_results, type = c("norm", "basic", "perc"))
+  
+  # Results summary
+  cat("\nBootstrap Results:\n")
+  cat("Original estimate:", round(boot_results$t0, 3), "\n")
+  cat("Bootstrap mean:", round(mean(boot_results$t), 3), "\n")
+  cat("Bootstrap SE:", round(sd(boot_results$t), 3), "\n")
+  cat("Bias:", round(mean(boot_results$t) - boot_results$t0, 4), "\n")
+  
+  # Create CI summary
+  ci_summary <- data.frame(
+    Method = c("Normal", "Basic", "Percentile"),
+    Lower = c(boot_ci$normal[2], boot_ci$basic[4], boot_ci$percent[4]),
+    Upper = c(boot_ci$normal[3], boot_ci$basic[5], boot_ci$percent[5]),
+    Width = c(
+      boot_ci$normal[3] - boot_ci$normal[2],
+      boot_ci$basic[5] - boot_ci$basic[4], 
+      boot_ci$percent[5] - boot_ci$percent[4]
+    )
+  )
+  
+  return(list(
+    boot_results = boot_results,
+    confidence_intervals = ci_summary
+  ))
+}
+
+# Perform bootstrap analysis
+tryCatch({
+  bootstrap_results <- perform_bootstrap(effects_data, n_boot = 300)
+  
+  # Display CI table
+  bootstrap_results$confidence_intervals %>%
+    kable(caption = "Bootstrap Confidence Intervals (95%)", digits = 3) %>%
+    kable_styling(bootstrap_options = c("striped", "hover"))
+  
+  # Simple bootstrap distribution plot
+  boot_df <- data.frame(estimate = bootstrap_results$boot_results$t)
+  
+  boot_plot <- ggplot(boot_df, aes(x = estimate)) +
+    geom_histogram(bins = 30, fill = "steelblue", alpha = 0.7) +
+    geom_vline(xintercept = bootstrap_results$boot_results$t0, 
+               color = "red", linewidth = 1.2) +
+    theme_minimal() +
+    labs(
+      title = "Bootstrap Distribution of Effect Size",
+      subtitle = paste0(length(bootstrap_results$boot_results$t), " bootstrap samples"),
+      x = "Effect Size (Cohen's d)",
+      y = "Frequency"
+    )
+  
+  print(boot_plot)
+  
+  cat("Bootstrap analysis completed successfully\n")
+  
+}, error = function(e) {
+  cat("Bootstrap analysis failed:", conditionMessage(e), "\n")
+  bootstrap_results <- list(
+    skipped = TRUE,
+    error = conditionMessage(e)
+  )
+})
+
+# Memory cleanup
+gc(verbose = FALSE)
+```
+
+## Bayesian Meta-Analysis
+
+```{r bayesian-analysis}
+if (bayesian_available) {
+  cat("=== Bayesian Meta-Analysis ===\n")
+  
+  tryCatch({
+    # Memory management before Bayesian analysis
+    gc(verbose = FALSE)
+    cat("Starting Bayesian analysis...\n")
+    
+    # Bayesian random effects meta-analysis
+    bayes_meta <- bayesmeta(
+      y = effects_data$Cohens_D,
+      sigma = effects_data$SE_D,
+      labels = effects_data$Study_ID,
+      mu.prior.mean = 0,
+      mu.prior.sd = 5,  # Reduced from 10 for efficiency
+      tau.prior = function(x) dhalfnormal(x, scale = 0.5)
+    )
+    
+    # Extract posterior summary
+    cat("Bayesian Results:\n")
+    print(summary(bayes_meta))
+    
+    # Create posterior summary table
+    posterior_summary <- data.frame(
+      Parameter = c("Effect Size (μ)", "Heterogeneity (τ)"),
+      Mean = c(bayes_meta$summary["mean", "mu"], 
+               bayes_meta$summary["mean", "tau"]),
+      SD = c(bayes_meta$summary["sd", "mu"],
+             bayes_meta$summary["sd", "tau"]),
+      Q025 = c(bayes_meta$summary["2.5%", "mu"],
+               bayes_meta$summary["2.5%", "tau"]),
+      Q975 = c(bayes_meta$summary["97.5%", "mu"],
+               bayes_meta$summary["97.5%", "tau"])
+    )
+    
+    posterior_summary %>%
+      kable(caption = "Bayesian Posterior Summary", digits = 3) %>%
+      kable_styling(bootstrap_options = c("striped", "hover"))
+    
+    # Probability statements
+    mu_mean <- bayes_meta$summary["mean", "mu"]
+    mu_sd <- bayes_meta$summary["sd", "mu"]
+    
+    prob_positive <- 1 - pnorm(0, mean = mu_mean, sd = mu_sd)
+    prob_large <- 1 - pnorm(0.8, mean = mu_mean, sd = mu_sd)
+    
+    cat("\nProbability Statements:\n")
+    cat("P(effect > 0):", round(prob_positive, 4), "\n")
+    cat("P(effect > 0.8):", round(prob_large, 4), "\n")
+    
+    # Evidence interpretation
+    if (prob_positive > 0.95) {
+      cat("Strong evidence for positive effect\n")
+    } else if (prob_positive > 0.90) {
+      cat("Moderate evidence for positive effect\n")
+    } else {
+      cat("Weak evidence for positive effect\n")
+    }
+    
+    bayesian_results <- list(
+      model = bayes_meta,
+      posterior_summary = posterior_summary,
+      probabilities = list(
+        prob_positive = prob_positive,
+        prob_large = prob_large
+      )
+    )
+    
+    cat("Bayesian analysis completed successfully\n")
+    
+  }, error = function(e) {
+    cat("Bayesian analysis failed:", conditionMessage(e), "\n")
+    bayesian_results <- list(
+      skipped = TRUE,
+      error = conditionMessage(e),
+      reason = "Insufficient memory or computational resources"
+    )
+  })
+  
+} else {
+  cat("=== Bayesian Analysis Skipped ===\n")
+  cat("bayesmeta package not available\n")
+  bayesian_results <- list(
+    skipped = TRUE,
+    reason = "Package not available"
+  )
+}
+
+# Memory cleanup
+gc(verbose = FALSE)
+```
+
+## Advanced Summary and Comparison
+
+```{r advanced-summary}
+cat("=== Advanced Statistics Summary ===\n")
+
+# Initialize results if they don't exist
+if (!exists("bootstrap_results")) {
+  bootstrap_results <- list(skipped = TRUE, boot_results = NULL, confidence_intervals = NULL)
+}
+if (!exists("bayesian_results")) {
+  bayesian_results <- list(skipped = TRUE, posterior_summary = NULL)
+}
+
+# Compile results from all methods
+methods_comparison <- data.frame(
+  Method = c("Frequentist (Random)", "Bootstrap", "Bayesian"),
+  Available = c(TRUE, !is.null(bootstrap_results$boot_results), bayesian_available),
+  Estimate = c(
+    meta_model$beta,
+    ifelse(!is.null(bootstrap_results$boot_results), 
+           mean(bootstrap_results$boot_results$t), NA),
+    ifelse(bayesian_available && !bayesian_results$skipped,
+           bayesian_results$posterior_summary$Mean[1], NA)
+  ),
+  CI_Lower = c(
+    meta_model$ci.lb,
+    ifelse(!is.null(bootstrap_results$confidence_intervals),
+           bootstrap_results$confidence_intervals$Lower[1], NA),
+    ifelse(bayesian_available && !bayesian_results$skipped,
+           bayesian_results$posterior_summary$Q025[1], NA)
+  ),
+  CI_Upper = c(
+    meta_model$ci.ub,
+    ifelse(!is.null(bootstrap_results$confidence_intervals),
+           bootstrap_results$confidence_intervals$Upper[1], NA),
+    ifelse(bayesian_available && !bayesian_results$skipped,
+           bayesian_results$posterior_summary$Q975[1], NA)
+  )
+)
+
+methods_comparison %>%
+  filter(Available == TRUE) %>%
+  select(-Available) %>%
+  kable(caption = "Comparison of Statistical Methods", digits = 3) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+
+# Overall interpretation
+cat("\nOverall Statistical Evidence:\n")
+available_methods <- sum(methods_comparison$Available)
+cat("Methods successfully completed:", available_methods, "/ 3\n")
+
+if (available_methods >= 2) {
+  cat("Convergent evidence across multiple statistical approaches\n")
+} else {
+  cat("Limited statistical approaches available\n")
+}
+```
+
+## Export Results
+
+```{r export-advanced}
+cat("=== Saving Advanced Statistics Results ===\n")
+
+# Compile all results
+advanced_stats_results <- list(
+  bootstrap = if(!is.null(bootstrap_results$boot_results)) bootstrap_results else list(skipped = TRUE),
+  bayesian = bayesian_results,
+  methods_comparison = methods_comparison,
+  summary = list(
+    available_methods = sum(methods_comparison$Available),
+    convergent_evidence = sum(methods_comparison$Available) >= 2
+  )
+)
+
+# Save results
+saveRDS(advanced_stats_results, "results/advanced_statistics.rds")
+cat("Advanced statistics results saved to: results/advanced_statistics.rds\n")
+
+# Final memory cleanup
+rm(list = setdiff(ls(), "advanced_stats_results"))
+gc(verbose = FALSE)
+cat("Advanced statistics module completed\n")
+```
+
+## Session Information
+
+```{r session-info}
+sessionInfo()
+```
+
+---
+
+*This module provides advanced statistical analyses when computational resources allow. Results are saved for integration with core analysis.*
