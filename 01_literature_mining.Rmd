@@ -769,7 +769,7 @@ if (nrow(collaboration_edges) > 0) {
       Degree = as.numeric(unname(degree_values)),
       Betweenness = as.numeric(unname(betweenness(network_graph))),
       Closeness = as.numeric(unname(closeness(network_graph))),
-      Publications = as.numeric(unname(author_freq[V(network_graph)$name]))
+      Publications = as.numeric(author_freq[match(V(network_graph)$name, names(author_freq))])
     )
     
     # Network visualization
