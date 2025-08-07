@@ -1,0 +1,380 @@
+---
+title: "CAMK2D Machine Learning Analysis"
+subtitle: "Optional Module - Predictive Modeling and Classification"
+author: "CAMK2D Research Automation System"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 2
+    number_sections: true
+    theme: flatly
+    highlight: tango
+    code_folding: show
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  warning = FALSE,
+  message = FALSE,
+  fig.width = 10,
+  fig.height = 6,
+  fig.align = 'center',
+  cache = FALSE,
+  comment = "#>"
+)
+
+set.seed(42)
+```
+
+# Machine Learning Analysis Module
+
+This optional module performs machine learning analysis on CAMK2D data, including predictive modeling and feature importance analysis.
+
+## Setup and Data Loading
+
+```{r setup-ml}
+rm(list = ls())
+gc(verbose = FALSE)
+
+required_packages <- c("tidyverse", "caret", "randomForest", "glmnet", "pROC")
+missing_packages <- character()
+
+for (pkg in required_packages) {
+  if (!requireNamespace(pkg, quietly = TRUE)) {
+    missing_packages <- c(missing_packages, pkg)
+  }
+}
+
+if (length(missing_packages) > 0) {
+  cat("Missing packages:", paste(missing_packages, collapse = ", "), "\n")
+  cat("Skipping machine learning analysis\n")
+  skip_ml <- TRUE
+} else {
+  suppressPackageStartupMessages({
+    library(tidyverse)
+    library(caret)
+    library(randomForest)
+    library(glmnet)
+    library(pROC)
+  })
+  skip_ml <- FALSE
+  cat("Machine learning packages loaded\n")
+}
+```
+
+## Load Integration Data
+
+```{r load-ml-data}
+if (skip_ml) {
+  cat("Machine learning analysis skipped due to missing packages\n")
+} else {
+
+if (!file.exists("data/integrated_camk2d_data.rds")) {
+  cat("Integrated data not found, creating minimal dataset\n")
+  
+  ml_data <- data.frame(
+    Study_ID = paste0("Study_", 1:20),
+    Effect_Size = rnorm(20, mean = 0.3, sd = 0.2),
+    Expression_Level = runif(20, 0.5, 2.0),
+    Tissue_Type = sample(c("Brain", "Heart", "Muscle"), 20, replace = TRUE),
+    Condition = sample(c("Control", "Disease"), 20, replace = TRUE),
+    Sample_Size = sample(50:200, 20),
+    Quality_Score = runif(20, 0.6, 1.0),
+    stringsAsFactors = FALSE
+  )
+  
+} else {
+  tryCatch({
+    integrated_data <- readRDS("data/integrated_camk2d_data.rds")
+    ml_data <- integrated_data
+    cat("Loaded integrated CAMK2D data\n")
+  }, error = function(e) {
+    cat("Error loading integrated data, creating minimal dataset\n")
+    ml_data <- data.frame(
+      Study_ID = paste0("Study_", 1:20),
+      Effect_Size = rnorm(20, mean = 0.3, sd = 0.2),
+      Expression_Level = runif(20, 0.5, 2.0),
+      Tissue_Type = sample(c("Brain", "Heart", "Muscle"), 20, replace = TRUE),
+      Condition = sample(c("Control", "Disease"), 20, replace = TRUE),
+      Sample_Size = sample(50:200, 20),
+      Quality_Score = runif(20, 0.6, 1.0),
+      stringsAsFactors = FALSE
+    )
+  })
+}
+
+cat("Dataset dimensions:", nrow(ml_data), "x", ncol(ml_data), "\n")
+gc(verbose = FALSE)
+
+}
+```
+
+## Feature Engineering
+
+```{r feature-engineering}
+if (!skip_ml && nrow(ml_data) > 10) {
+
+cat("=== Feature Engineering ===\n")
+
+ml_features <- ml_data %>%
+  mutate(
+    High_Effect = ifelse(Effect_Size > median(Effect_Size, na.rm = TRUE), 1, 0),
+    Log_Sample_Size = log(Sample_Size + 1),
+    Expression_Quartile = ntile(Expression_Level, 4),
+    Quality_High = ifelse(Quality_Score > 0.8, 1, 0),
+    Tissue_Brain = ifelse(Tissue_Type == "Brain", 1, 0),
+    Tissue_Heart = ifelse(Tissue_Type == "Heart", 1, 0),
+    Condition_Disease = ifelse(Condition == "Disease", 1, 0)
+  ) %>%
+  select(-Study_ID, -Tissue_Type, -Condition) %>%
+  filter(complete.cases(.))
+
+cat("Features created. Final dataset:", nrow(ml_features), "observations\n")
+cat("Target variable distribution:\n")
+table(ml_features$High_Effect)
+
+} else {
+  cat("Insufficient data for feature engineering\n")
+  ml_features <- data.frame(High_Effect = c(0, 1))
+}
+```
+
+## Random Forest Model
+
+```{r random-forest}
+if (!skip_ml && nrow(ml_features) > 10) {
+
+cat("=== Random Forest Analysis ===\n")
+
+tryCatch({
+  if (nrow(ml_features) < 20) {
+    cat("Sample size too small for proper train/test split\n")
+    
+    rf_model <- randomForest(
+      as.factor(High_Effect) ~ ., 
+      data = ml_features,
+      ntree = 100,
+      importance = TRUE
+    )
+    
+    rf_predictions <- predict(rf_model, ml_features, type = "prob")[,2]
+    rf_accuracy <- mean(predict(rf_model) == as.factor(ml_features$High_Effect))
+    
+  } else {
+    train_indices <- sample(nrow(ml_features), floor(0.7 * nrow(ml_features)))
+    train_data <- ml_features[train_indices, ]
+    test_data <- ml_features[-train_indices, ]
+    
+    rf_model <- randomForest(
+      as.factor(High_Effect) ~ ., 
+      data = train_data,
+      ntree = 100,
+      importance = TRUE
+    )
+    
+    rf_predictions <- predict(rf_model, test_data, type = "prob")[,2]
+    rf_accuracy <- mean(predict(rf_model, test_data) == as.factor(test_data$High_Effect))
+  }
+  
+  cat("Random Forest Accuracy:", round(rf_accuracy, 3), "\n")
+  
+  importance_scores <- importance(rf_model)
+  feature_importance <- data.frame(
+    Feature = rownames(importance_scores),
+    Importance = importance_scores[, "MeanDecreaseGini"]
+  ) %>%
+    arrange(desc(Importance))
+  
+  cat("Top 5 Important Features:\n")
+  print(head(feature_importance, 5))
+  
+}, error = function(e) {
+  cat("Random Forest failed:", conditionMessage(e), "\n")
+  rf_model <- NULL
+  feature_importance <- data.frame(Feature = character(), Importance = numeric())
+})
+
+} else {
+  cat("Random Forest skipped\n")
+  rf_model <- NULL
+  feature_importance <- data.frame(Feature = character(), Importance = numeric())
+}
+```
+
+## Logistic Regression with Regularization
+
+```{r logistic-regression}
+if (!skip_ml && nrow(ml_features) > 10) {
+
+cat("=== Regularized Logistic Regression ===\n")
+
+tryCatch({
+  X_matrix <- model.matrix(High_Effect ~ ., data = ml_features)[, -1]
+  y_vector <- ml_features$High_Effect
+  
+  if (length(unique(y_vector)) < 2) {
+    cat("Insufficient outcome variation for logistic regression\n")
+    glmnet_model <- NULL
+    lr_accuracy <- 0.5
+    
+  } else {
+    cv_fit <- cv.glmnet(X_matrix, y_vector, family = "binomial", alpha = 1)
+    
+    glmnet_model <- glmnet(X_matrix, y_vector, family = "binomial", 
+                          lambda = cv_fit$lambda.min, alpha = 1)
+    
+    lr_predictions <- predict(glmnet_model, X_matrix, type = "response")
+    lr_pred_class <- ifelse(lr_predictions > 0.5, 1, 0)
+    lr_accuracy <- mean(lr_pred_class == y_vector)
+    
+    cat("Logistic Regression Accuracy:", round(lr_accuracy, 3), "\n")
+    cat("Optimal Lambda:", round(cv_fit$lambda.min, 4), "\n")
+    
+    coef_matrix <- coef(glmnet_model)
+    non_zero_coefs <- coef_matrix[coef_matrix[,1] != 0, , drop = FALSE]
+    cat("Selected Features:", nrow(non_zero_coefs) - 1, "out of", ncol(X_matrix), "\n")
+  }
+  
+}, error = function(e) {
+  cat("Logistic Regression failed:", conditionMessage(e), "\n")
+  glmnet_model <- NULL
+  lr_accuracy <- 0.5
+})
+
+} else {
+  cat("Logistic Regression skipped\n")
+  glmnet_model <- NULL
+  lr_accuracy <- 0.5
+}
+```
+
+## Model Comparison and Visualization
+
+```{r model-comparison}
+if (!skip_ml && exists("rf_model") && !is.null(rf_model)) {
+
+cat("=== Model Performance Visualization ===\n")
+
+model_performance <- data.frame(
+  Model = c("Random Forest", "Logistic Regression"),
+  Accuracy = c(rf_accuracy, lr_accuracy),
+  Type = c("Ensemble", "Linear")
+)
+
+performance_plot <- ggplot(model_performance, aes(x = Model, y = Accuracy, fill = Type)) +
+  geom_col(alpha = 0.8) +
+  geom_text(aes(label = round(Accuracy, 3)), vjust = -0.5) +
+  ylim(0, 1) +
+  theme_minimal() +
+  labs(
+    title = "Machine Learning Model Performance",
+    subtitle = "CAMK2D Effect Size Prediction",
+    y = "Accuracy",
+    x = "Model Type"
+  ) +
+  scale_fill_manual(values = c("Ensemble" = "steelblue", "Linear" = "darkgreen"))
+
+print(performance_plot)
+
+# Export high-quality figure
+ggsave(filename = "figures/ml_model_performance.png", 
+       plot = performance_plot, 
+       width = 12, height = 8, dpi = 300)
+cat("✅ Figure saved: figures/ml_model_performance.png\n")
+
+if (nrow(feature_importance) > 0) {
+  feature_plot <- ggplot(head(feature_importance, 6), 
+                        aes(x = reorder(Feature, Importance), y = Importance)) +
+    geom_col(fill = "coral", alpha = 0.8) +
+    coord_flip() +
+    theme_minimal() +
+    labs(
+      title = "Feature Importance",
+      subtitle = "Random Forest Variable Importance",
+      x = "Features",
+      y = "Importance Score"
+    )
+  
+  print(feature_plot)
+  
+  # Export high-quality figure
+  ggsave(filename = "figures/feature_importance.png", 
+         plot = feature_plot, 
+         width = 12, height = 8, dpi = 300)
+  cat("✅ Figure saved: figures/feature_importance.png\n")
+}
+
+} else {
+  cat("Model visualization skipped\n")
+}
+```
+
+## Predictive Insights
+
+```{r predictive-insights}
+if (!skip_ml && nrow(ml_features) > 5) {
+
+cat("=== Predictive Insights Summary ===\n")
+
+insights <- list(
+  model_performance = model_performance,
+  feature_importance = if(exists("feature_importance")) feature_importance else data.frame(),
+  sample_size = nrow(ml_features),
+  outcome_balance = table(ml_features$High_Effect),
+  top_predictors = if(nrow(feature_importance) > 0) head(feature_importance$Feature, 3) else character()
+)
+
+cat("Key Findings:\n")
+cat("- Best performing model:", model_performance$Model[which.max(model_performance$Accuracy)], "\n")
+cat("- Best accuracy achieved:", round(max(model_performance$Accuracy), 3), "\n")
+
+if (length(insights$top_predictors) > 0) {
+  cat("- Top predictive features:", paste(insights$top_predictors, collapse = ", "), "\n")
+}
+
+cat("- Analysis based on", insights$sample_size, "observations\n")
+
+} else {
+  insights <- list(
+    status = "insufficient_data",
+    message = "Machine learning analysis requires more data"
+  )
+  cat("Insufficient data for meaningful insights\n")
+}
+```
+
+## Export Results
+
+```{r export-ml}
+cat("=== Saving Machine Learning Results ===\n")
+
+ml_results <- list(
+  models = list(
+    random_forest = if(exists("rf_model")) rf_model else NULL,
+    logistic_regression = if(exists("glmnet_model")) glmnet_model else NULL
+  ),
+  performance = if(exists("model_performance")) model_performance else data.frame(),
+  feature_importance = if(exists("feature_importance")) feature_importance else data.frame(),
+  insights = if(exists("insights")) insights else list(),
+  data_summary = list(
+    n_observations = if(exists("ml_features")) nrow(ml_features) else 0,
+    n_features = if(exists("ml_features")) ncol(ml_features) - 1 else 0
+  ),
+  skipped = skip_ml
+)
+
+saveRDS(ml_results, "results/machine_learning_analysis.rds")
+cat("Machine learning results saved to: results/machine_learning_analysis.rds\n")
+
+rm(list = setdiff(ls(), "ml_results"))
+gc(verbose = FALSE)
+cat("Machine learning analysis completed\n")
+```
+
+---
+
+*This module provides machine learning analysis for CAMK2D effect prediction. Results are saved for integration with other analyses.*

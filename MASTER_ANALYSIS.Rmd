@@ -1,0 +1,313 @@
+---
+title: "CAMK2D Master Analysis Pipeline"
+author: "CAMK2D Research Team"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    theme: cosmo
+    highlight: tango
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+# CAMK2D Complete Analysis Pipeline
+
+This notebook runs all CAMK2D analyses in sequence. You can run each step individually or all at once.
+
+## Initial Setup and Dependency Check
+
+```{r initialize}
+# Check and create necessary directories
+if (!dir.exists("data")) {
+  dir.create("data", recursive = TRUE)
+  cat("Created data/ directory\n")
+}
+
+if (!dir.exists("results")) {
+  dir.create("results", recursive = TRUE)
+  cat("Created results/ directory\n")
+}
+
+if (!dir.exists("figures")) {
+  dir.create("figures", recursive = TRUE)
+  cat("Created figures/ directory\n")
+}
+
+# Check critical packages
+cat("\n=== Checking Critical Dependencies ===\n")
+required_packages <- c("tidyverse", "rmarkdown", "knitr", "shiny", "metafor")
+missing_packages <- character()
+
+for (pkg in required_packages) {
+  if (!requireNamespace(pkg, quietly = TRUE)) {
+    missing_packages <- c(missing_packages, pkg)
+    cat("✗", pkg, "is missing\n")
+  } else {
+    cat("✓", pkg, "is installed\n")
+  }
+}
+
+if (length(missing_packages) > 0) {
+  cat("\n⚠️ WARNING: Missing critical packages:", paste(missing_packages, collapse = ", "), "\n")
+  cat("Please run: source('install_dependencies.R')\n")
+  stop("Missing required packages. Please install dependencies first.")
+}
+
+# Load required libraries
+suppressPackageStartupMessages({
+  library(tidyverse)
+  library(rmarkdown)
+})
+
+# Set working directory
+cat("\nCurrent directory:", getwd(), "\n")
+
+# Clean up any previous runs
+cat("\n=== Cleaning Previous Outputs ===\n")
+gc(verbose = FALSE)
+cat("Memory cleared\n")
+
+# Record start time
+start_time <- Sys.time()
+cat("\n=== Analysis Started ===\n")
+cat("Time:", format(start_time, "%Y-%m-%d %H:%M:%S"), "\n")
+```
+
+## Step 1: Literature Mining
+
+Analyzes CAMK2D literature to identify research trends, knowledge gaps, and key findings.
+
+```{r literature-mining, results='hide'}
+cat("\n═══════════════════════════════════════\n")
+cat("  STEP 1: LITERATURE MINING\n")
+cat("═══════════════════════════════════════\n")
+
+tryCatch({
+  rmarkdown::render(
+    "01_literature_mining.Rmd",
+    output_file = "01_literature_mining.html",
+    quiet = TRUE
+  )
+  cat("✅ Literature mining completed successfully\n")
+  cat("   Output: 01_literature_mining.html\n")
+  
+  # Clean memory after step
+  gc(verbose = FALSE)
+  cat("   Memory cleaned\n")
+}, error = function(e) {
+  cat("❌ Error in literature mining:", e$message, "\n")
+  cat("   Continuing with next step...\n")
+})
+```
+
+## Step 2: GEO Transcriptomics Meta-Analysis
+
+Analyzes Gene Expression Omnibus datasets for CAMK2D expression patterns.
+
+```{r geo-analysis, results='hide'}
+cat("\n═══════════════════════════════════════\n")
+cat("  STEP 2: GEO TRANSCRIPTOMICS\n")
+cat("═══════════════════════════════════════\n")
+
+tryCatch({
+  rmarkdown::render(
+    "02_geo_transcriptomics_meta_analysis.Rmd",
+    output_file = "02_geo_transcriptomics_meta_analysis.html",
+    quiet = TRUE
+  )
+  cat("✅ GEO transcriptomics completed successfully\n")
+  cat("   Output: 02_geo_transcriptomics_meta_analysis.html\n")
+}, error = function(e) {
+  cat("❌ Error in GEO analysis:", e$message, "\n")
+})
+```
+
+## Step 3: Phosphoproteomics Analysis
+
+Analyzes CAMK2D phosphorylation targets and protein-protein interactions.
+
+```{r phosphoproteomics, results='hide'}
+cat("\n═══════════════════════════════════════\n")
+cat("  STEP 3: PHOSPHOPROTEOMICS\n")
+cat("═══════════════════════════════════════\n")
+
+tryCatch({
+  rmarkdown::render(
+    "03_phosphoproteomics.Rmd",
+    output_file = "03_phosphoproteomics.html",
+    quiet = TRUE
+  )
+  cat("✅ Phosphoproteomics completed successfully\n")
+  cat("   Output: 03_phosphoproteomics.html\n")
+}, error = function(e) {
+  cat("❌ Error in phosphoproteomics:", e$message, "\n")
+})
+```
+
+## Step 4: Integrated Meta-Analysis
+
+Integrates all data sources and performs comprehensive meta-analysis.
+
+```{r meta-analysis, results='hide'}
+cat("\n═══════════════════════════════════════\n")
+cat("  STEP 4: META-ANALYSIS INTEGRATION\n")
+cat("═══════════════════════════════════════\n")
+
+tryCatch({
+  rmarkdown::render(
+    "04_meta_analysis.Rmd",
+    output_file = "04_meta_analysis.html",
+    quiet = TRUE
+  )
+  cat("✅ Meta-analysis completed successfully\n")
+  cat("   Output: 04_meta_analysis.html\n")
+}, error = function(e) {
+  cat("❌ Error in meta-analysis:", e$message, "\n")
+})
+```
+
+## Step 5: Interactive Dashboard
+
+Generates interactive dashboard with all analysis results.
+
+```{r dashboard, results='hide'}
+cat("\n═══════════════════════════════════════\n")
+cat("  STEP 5: DASHBOARD GENERATION\n")
+cat("═══════════════════════════════════════\n")
+
+tryCatch({
+  rmarkdown::render(
+    "05_dashboard.Rmd",
+    output_file = "dashboard.html",
+    quiet = TRUE
+  )
+  cat("✅ Dashboard generated successfully\n")
+  cat("   Output: dashboard.html\n")
+}, error = function(e) {
+  cat("❌ Error in dashboard generation:", e$message, "\n")
+})
+```
+
+## Results Summary
+
+```{r summary}
+cat("\n═══════════════════════════════════════\n")
+cat("         ANALYSIS COMPLETE\n")
+cat("═══════════════════════════════════════\n\n")
+
+# Calculate runtime
+end_time <- Sys.time()
+runtime <- difftime(end_time, start_time, units = "mins")
+cat("Total runtime:", round(runtime, 2), "minutes\n\n")
+
+# Check outputs
+cat("OUTPUT FILES STATUS:\n")
+cat("-------------------\n")
+
+outputs <- data.frame(
+  Step = c("Literature Mining", "GEO Transcriptomics", "Phosphoproteomics", 
+           "Meta-Analysis", "Dashboard"),
+  File = c("01_literature_mining.html", "02_geo_transcriptomics_meta_analysis.html",
+           "03_phosphoproteomics.html", "04_meta_analysis.html", "dashboard.html"),
+  Status = NA
+)
+
+for (i in 1:nrow(outputs)) {
+  outputs$Status[i] <- ifelse(file.exists(outputs$File[i]), "✅ Generated", "❌ Missing")
+}
+
+knitr::kable(outputs, align = "llc")
+```
+
+## Data Files Verification
+
+```{r verify-data}
+cat("\nDATA FILES STATUS:\n")
+cat("-----------------\n")
+
+data_files <- data.frame(
+  Description = c("Dashboard Metrics", "Phospho Integration", "Meta-Analysis Summary"),
+  File = c("data/dashboard_metrics.rds", 
+           "data/phospho_integration_data.rds",
+           "results/meta_analysis_summary.rds"),
+  Status = NA
+)
+
+for (i in 1:nrow(data_files)) {
+  if (file.exists(data_files$File[i])) {
+    size <- file.size(data_files$File[i])
+    data_files$Status[i] <- paste("✅", round(size/1024, 2), "KB")
+  } else {
+    data_files$Status[i] <- "❌ Missing"
+  }
+}
+
+knitr::kable(data_files, align = "llc")
+```
+
+## Excel Reports
+
+```{r excel-reports}
+cat("\nEXCEL REPORTS:\n")
+cat("-------------\n")
+
+excel_files <- list.files("results", pattern = "*.xlsx", full.names = TRUE)
+if (length(excel_files) > 0) {
+  excel_df <- data.frame(
+    Report = basename(excel_files),
+    Size = paste(round(file.size(excel_files)/1024, 2), "KB"),
+    Modified = file.mtime(excel_files)
+  )
+  knitr::kable(excel_df, align = "lrr")
+} else {
+  cat("No Excel reports found\n")
+}
+```
+
+## Next Steps
+
+### View Results
+
+1. **HTML Reports**: Open each HTML file to review detailed analysis results
+2. **Dashboard**: Open `dashboard.html` in your browser for interactive exploration
+3. **Excel Reports**: Check the `results/` folder for downloadable data
+
+### Launch Interactive Dashboard
+
+To run the dashboard as a Shiny app with full interactivity:
+
+```r
+# Run this in the R console:
+rmarkdown::run('05_dashboard.Rmd')
+```
+
+### Re-run Specific Steps
+
+To re-run only specific analyses:
+
+```r
+# Literature mining only
+rmarkdown::render("01_literature_mining.Rmd")
+
+# GEO analysis only
+rmarkdown::render("02_geo_transcriptomics_meta_analysis.Rmd")
+
+# Phosphoproteomics only
+rmarkdown::render("03_phosphoproteomics.Rmd")
+
+# Meta-analysis only
+rmarkdown::render("04_meta_analysis.Rmd")
+
+# Dashboard only
+rmarkdown::render("05_dashboard.Rmd")
+```
+
+## Session Information
+
+```{r session-info}
+sessionInfo()
+```
