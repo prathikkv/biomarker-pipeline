@@ -1,0 +1,55 @@
+# R files
+.Rdata
+.Rhistory
+.RData
+.Ruserdata
+*.Rproj
+
+# Results and cache directories
+results/
+cache/
+data/geo_cache/
+figures/temp/
+
+# System files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Large data files
+*.rds
+*.RData
+*.csv.gz
+*.txt.gz
+
+# Temporary files
+*.tmp
+*.temp
+*~
+*.swp
+*.swo
+
+# HTML output files
+*.html
+!dashboard.html
+
+# Log files
+*.log
+
+# IDE files
+.vscode/
+.idea/
+*.Rproj.user
+
+# Package build
+*.tar.gz
+*.zip
+
+# Include important data validation files
+!data/dataset_validation_results.csv
+!data/recommended_datasets.csv
+!data/validation_results_comprehensive.csv
