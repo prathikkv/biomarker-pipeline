@@ -2,7 +2,7 @@
 # This script provides direct execution commands
 
 cat("🚀 Starting CAMK2D Analysis - Simple Version\n")
-cat("=" * 50, "\n")
+cat(paste(rep("=", 50), collapse=""), "\n")
 
 # Ensure we're in the right directory
 if (!file.exists("functions/dge_analyzer.R")) {
@@ -47,7 +47,7 @@ cat("✓ Results directories created\n")
 
 # Execute analysis phases
 cat("\n📊 Starting Analysis Phases\n")
-cat("-" * 30, "\n")
+cat(paste(rep("-", 30), collapse=""), "\n")
 
 # Phase 1: Simulate DGE Analysis
 cat("Phase 1: DGE Analysis\n")
@@ -169,7 +169,7 @@ end_time <- Sys.time()
 execution_time <- as.numeric(difftime(end_time, start_time, units = "mins"))
 
 cat("\n🎉 Analysis Completed Successfully!\n")
-cat("=" * 40, "\n")
+cat(paste(rep("=", 40), collapse=""), "\n")
 cat("📊 Summary:\n")
 cat("  - Execution time:", round(execution_time, 2), "minutes\n")
 cat("  - Datasets analyzed: 10 (simulated)\n") 

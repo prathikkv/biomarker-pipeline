@@ -414,7 +414,10 @@ validate_camk_family_findings <- function(dge_results_list) {
   }
   
   # Overall CAMK family validation score
-  validated_genes <- sum(sapply(validation_results, function(x) x$validated))
+  validated_genes <- sum(sapply(validation_results, function(x) {
+    if (is.null(x$validated)) return(0)
+    as.numeric(x$validated)
+  }), na.rm = TRUE)
   validation_score <- validated_genes / length(camk_genes)
   
   list(
@@ -497,12 +500,62 @@ calculate_bias_strength <- function(egger_test, begg_test) {
 
 extract_gene_across_datasets <- function(dge_results_list, gene_symbol) {
   # Extract specific gene results across all datasets
-  data.frame()  # Placeholder
+  gene_results <- list()
+  
+  for (i in seq_along(dge_results_list)) {
+    dataset_id <- dge_results_list[[i]]$dataset_id
+    dge_data <- dge_results_list[[i]]$dge_results
+    
+    if (is.null(dge_data) || nrow(dge_data) == 0) next
+    
+    # Find the specific gene
+    gene_row <- dge_data[dge_data$Gene_Symbol == gene_symbol, ]
+    
+    if (nrow(gene_row) > 0) {
+      gene_results[[length(gene_results) + 1]] <- data.frame(
+        dataset_id = dataset_id,
+        gene_symbol = gene_symbol,
+        logFC = gene_row$logFC[1],
+        P.Value = gene_row$P.Value[1],
+        adj.P.Val = gene_row$adj.P.Val[1],
+        stringsAsFactors = FALSE
+      )
+    }
+  }
+  
+  if (length(gene_results) == 0) {
+    return(data.frame())
+  }
+  
+  do.call(rbind, gene_results)
 }
 
 perform_simple_meta_analysis <- function(gene_data) {
   # Simple fixed/random effects meta-analysis
-  list(pooled_effect = 0, p_value = 1)  # Placeholder
+  if (nrow(gene_data) < 2) {
+    return(list(pooled_effect = NA, p_value = 1, status = "insufficient_data"))
+  }
+  
+  # Simple fixed effects meta-analysis
+  weights <- 1 / (gene_data$P.Value + 0.001)  # Inverse p-value weighting
+  weighted_effects <- gene_data$logFC * weights
+  pooled_effect <- sum(weighted_effects) / sum(weights)
+  
+  # Combined p-value using Fisher's method
+  valid_pvals <- gene_data$P.Value[!is.na(gene_data$P.Value) & gene_data$P.Value > 0]
+  if (length(valid_pvals) >= 2) {
+    chi_square <- -2 * sum(log(valid_pvals))
+    combined_pval <- 1 - pchisq(chi_square, df = 2 * length(valid_pvals))
+  } else {
+    combined_pval <- min(gene_data$P.Value, na.rm = TRUE)
+  }
+  
+  list(
+    pooled_effect = pooled_effect,
+    p_value = combined_pval,
+    n_studies = nrow(gene_data),
+    status = "success"
+  )
 }
 
 assess_clinical_significance <- function(dge_results_list) {
