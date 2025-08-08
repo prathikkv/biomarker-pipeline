@@ -413,7 +413,6 @@ main <- function() {
   return(results)
 }
 
-# Execute if run as script
-if (sys.nframe() == 0) {
-  results <- main()
-}
+# Execute the main function
+cat("🎬 Starting main analysis execution...\n")
+results <- main()
