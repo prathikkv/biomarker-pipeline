@@ -4,7 +4,7 @@
 # This script runs the complete enhanced analysis pipeline
 
 cat("🚀 Starting Comprehensive CAMK2D Biomarker Analysis Pipeline\n")
-cat("=" * 60, "\n")
+cat(paste(rep("=", 60), collapse=""), "\n")
 
 # Set up analysis environment
 start_time <- Sys.time()
@@ -73,7 +73,7 @@ cat("✓ All required packages loaded\n")
 run_comprehensive_analysis <- function(dataset_config = NULL, analysis_params = list()) {
   
   cat("\n📊 Phase 1: Dataset Validation and DGE Analysis\n")
-  cat("-" * 50, "\n")
+  cat(paste(rep("-", 50), collapse=""), "\n")
   
   # Step 1: Load and validate datasets
   if (is.null(dataset_config)) {
@@ -89,7 +89,7 @@ run_comprehensive_analysis <- function(dataset_config = NULL, analysis_params = 
   cat("✓ DGE analysis completed and saved\n")
   
   cat("\n🔬 Phase 2: Statistical Validation\n")
-  cat("-" * 50, "\n")
+  cat(paste(rep("-", 50), collapse=""), "\n")
   
   # Step 2: Statistical validation
   validation_results <- perform_statistical_validation(dge_results$dataset_analyses)
@@ -101,7 +101,7 @@ run_comprehensive_analysis <- function(dataset_config = NULL, analysis_params = 
   cat("  - Adequately powered datasets:", validation_results$power_analysis$summary$proportion_adequately_powered * 100, "%\n")
   
   cat("\n🧬 Phase 3: Pathway Enrichment Analysis\n")
-  cat("-" * 50, "\n")
+  cat(paste(rep("-", 50), collapse=""), "\n")
   
   # Step 3: Pathway analysis
   pathway_results <- perform_comprehensive_pathway_analysis(
@@ -116,7 +116,7 @@ run_comprehensive_analysis <- function(dataset_config = NULL, analysis_params = 
   cat("  - Reproducible pathways identified:", length(pathway_results$meta_analysis$reproducible_pathways), "\n")
   
   cat("\n🎯 Phase 4: Phosphoproteomic Analysis\n")
-  cat("-" * 50, "\n")
+  cat(paste(rep("-", 50), collapse=""), "\n")
   
   # Step 4: Phosphoproteomic analysis
   phospho_results <- perform_phosphoproteomic_analysis(
@@ -130,7 +130,7 @@ run_comprehensive_analysis <- function(dataset_config = NULL, analysis_params = 
   cat("  - Therapeutic targets prioritized:", length(phospho_results$therapeutic_targets$top_5_targets), "\n")
   
   cat("\n📚 Phase 5: Literature Mining\n")
-  cat("-" * 50, "\n")
+  cat(paste(rep("-", 50), collapse=""), "\n")
   
   # Step 5: Literature mining
   literature_results <- perform_literature_mining(
@@ -144,7 +144,7 @@ run_comprehensive_analysis <- function(dataset_config = NULL, analysis_params = 
   cat("  - Evidence strength score:", literature_results$evidence_scores$overall_confidence, "/10\n")
   
   cat("\n📊 Phase 6: Integration and Report Generation\n")
-  cat("-" * 50, "\n")
+  cat(paste(rep("-", 50), collapse=""), "\n")
   
   # Step 6: Generate comprehensive reports
   integrated_results <- list(
@@ -176,7 +176,7 @@ run_comprehensive_analysis <- function(dataset_config = NULL, analysis_params = 
 generate_enhanced_report <- function(results_path = "results/final_reports/integrated_analysis_results.rds") {
   
   cat("\n📝 Generating Enhanced HTML Report\n")
-  cat("-" * 50, "\n")
+  cat(paste(rep("-", 50), collapse=""), "\n")
   
   tryCatch({
     
@@ -329,6 +329,7 @@ simulate_comprehensive_dge_analysis <- function(dataset_config) {
     dataset_analyses[[dataset_id]] <- list(
       dataset_id = dataset_id,
       platform = sample(c("RNA-seq", "Microarray"), 1),
+      method = sample(c("edgeR", "DESeq2", "limma"), 1),
       sample_size = list(
         total = n_samples,
         disease = ceiling(n_samples * 0.5),
@@ -384,7 +385,7 @@ main <- function() {
   cat("🎯 CAMK2D Comprehensive Biomarker Analysis Pipeline\n")
   cat("Version: v2.0 Enhanced\n")
   cat("Date: ", as.character(Sys.Date()), "\n")
-  cat("=" * 60, "\n\n")
+  cat(paste(rep("=", 60), collapse=""), "\n\n")
   
   # Execute comprehensive analysis
   results <- run_comprehensive_analysis()
@@ -397,7 +398,7 @@ main <- function() {
   execution_time <- as.numeric(difftime(end_time, start_time, units = "mins"))
   
   cat("\n🎉 Analysis Pipeline Completed Successfully!\n")
-  cat("=" * 60, "\n")
+  cat(paste(rep("=", 60), collapse=""), "\n")
   cat("📊 Summary:\n")
   cat("  - Total execution time:", round(execution_time, 2), "minutes\n")
   cat("  - Datasets analyzed:", length(results$dge_analysis$dataset_analyses), "\n")
